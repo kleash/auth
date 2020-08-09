@@ -380,8 +380,9 @@ func TestRBAC(t *testing.T) {
 			Role:       "employee"}, u)
 		w.WriteHeader(201)
 	}
-	mux.Handle("/authForEmployees", a.RBAC("employee", http.HandlerFunc(handler)))
-	mux.Handle("/authForExternals", a.RBAC("external", http.HandlerFunc(handler)))
+	mux.Handle("/authForEmployees", a.RBAC([]string{"employee"}, http.HandlerFunc(handler)))
+	mux.Handle("/authForExternals", a.RBAC([]string{"external"}, http.HandlerFunc(handler)))
+	mux.Handle("/authCommon", a.RBAC([]string{"employee", "external"}, http.HandlerFunc(handler)))
 	server := httptest.NewServer(mux)
 	defer server.Close()
 
@@ -408,6 +409,14 @@ func TestRBAC(t *testing.T) {
 	data, err := ioutil.ReadAll(resp.Body)
 	require.NoError(t, err)
 	assert.Equal(t, "Access denied\n", string(data))
+
+	req, err = http.NewRequest("GET", server.URL+"/authCommon", nil)
+	require.Nil(t, err)
+	req.AddCookie(&http.Cookie{Name: "JWT", Value: testJwtValid, HttpOnly: true, Path: "/", MaxAge: expiration, Secure: false})
+	req.Header.Add("X-XSRF-TOKEN", "random id")
+	resp, err = client.Do(req)
+	require.NoError(t, err)
+	assert.Equal(t, 201, resp.StatusCode, "valid token user")
 }
 
 func makeTestMux(_ *testing.T, a *Authenticator, required bool) http.Handler {
